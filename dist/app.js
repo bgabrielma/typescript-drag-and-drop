@@ -50,13 +50,23 @@ var ProjectState = /** @class */ (function (_super) {
     }
     ProjectState.prototype.addProject = function (newProject) {
         this.projects.push(newProject);
-        for (var _i = 0, _a = this.listeners; _i < _a.length; _i++) {
-            var listenerFn = _a[_i];
-            listenerFn(__spreadArrays(this.projects));
+        this.updateListeners();
+    };
+    ProjectState.prototype.moveProject = function (projectId, newStatus) {
+        var project = this.projects.find(function (project) { return project.id === projectId; });
+        if (project && project.status != newStatus) {
+            project.status = newStatus;
+            this.updateListeners();
         }
     };
     ProjectState.getInstance = function () {
         return this.instance ? this.instance : (this.instance = new ProjectState());
+    };
+    ProjectState.prototype.updateListeners = function () {
+        for (var _i = 0, _a = this.listeners; _i < _a.length; _i++) {
+            var listenerFn = _a[_i];
+            listenerFn(__spreadArrays(this.projects));
+        }
     };
     return ProjectState;
 }(State));
@@ -123,6 +133,46 @@ function AutoBind(target, methodName, descriptor) {
     };
     return adjDescriptor;
 }
+// ProjectItem Class
+var ProjectItem = /** @class */ (function (_super) {
+    __extends(ProjectItem, _super);
+    function ProjectItem(hostId, project) {
+        var _this = _super.call(this, "single-project", hostId, false, project.id) || this;
+        _this.project = project;
+        _this.configure();
+        _this.renderContent();
+        return _this;
+    }
+    Object.defineProperty(ProjectItem.prototype, "persons", {
+        get: function () {
+            return this.project.people === 1
+                ? "1 person"
+                : this.project.people + " persons";
+        },
+        enumerable: true,
+        configurable: true
+    });
+    ProjectItem.prototype.dragStartHandler = function (event) {
+        event.dataTransfer.setData("text/plain", this.project.id);
+        event.dataTransfer.effectAllowed = "move";
+    };
+    ProjectItem.prototype.dragEndHandler = function (_) {
+        console.log("DragEnd");
+    };
+    ProjectItem.prototype.configure = function () {
+        this.element.addEventListener("dragstart", this.dragStartHandler);
+        this.element.addEventListener("dragend", this.dragEndHandler);
+    };
+    ProjectItem.prototype.renderContent = function () {
+        this.element.querySelector("h2").textContent = this.project.title;
+        this.element.querySelector("h3").textContent = this.persons + " assigned";
+        this.element.querySelector("p").textContent = this.project.description;
+    };
+    __decorate([
+        AutoBind
+    ], ProjectItem.prototype, "dragStartHandler", null);
+    return ProjectItem;
+}(Component));
 // ProjectList Class
 var ProjectList = /** @class */ (function (_super) {
     __extends(ProjectList, _super);
@@ -136,6 +186,9 @@ var ProjectList = /** @class */ (function (_super) {
     }
     ProjectList.prototype.configure = function () {
         var _this = this;
+        this.element.addEventListener("dragover", this.dragOverHandler);
+        this.element.addEventListener("dragleave", this.dragLeaveHandler);
+        this.element.addEventListener("drop", this.dropHandler);
         projectState.addListener(function (projects) {
             _this.assignedProjects = projects.filter(function (item) {
                 if (_this.type === "active") {
@@ -145,6 +198,21 @@ var ProjectList = /** @class */ (function (_super) {
             });
             _this.renderProjects();
         });
+    };
+    ProjectList.prototype.dragOverHandler = function (event) {
+        if (event.dataTransfer && event.dataTransfer.types[0] === "text/plain") {
+            event.preventDefault();
+            var listEl = this.element.querySelector("ul");
+            listEl.classList.add("droppable");
+        }
+    };
+    ProjectList.prototype.dropHandler = function (event) {
+        var id = event.dataTransfer.getData("text/plain");
+        projectState.moveProject(id, this.type === "active" ? ProjectStatus.Active : ProjectStatus.Finished);
+    };
+    ProjectList.prototype.dragLeaveHandler = function (event) {
+        var listEl = this.element.querySelector("ul");
+        listEl === null || listEl === void 0 ? void 0 : listEl.classList.remove("droppable");
     };
     ProjectList.prototype.renderContent = function () {
         var listId = this.type + "-projects-list";
@@ -157,11 +225,18 @@ var ProjectList = /** @class */ (function (_super) {
         listEl.innerHTML = "";
         for (var _i = 0, _a = this.assignedProjects; _i < _a.length; _i++) {
             var item = _a[_i];
-            var listItem = document.createElement("li");
-            listItem.textContent = item.title;
-            listEl === null || listEl === void 0 ? void 0 : listEl.appendChild(listItem);
+            new ProjectItem(this.element.querySelector("ul").id, item);
         }
     };
+    __decorate([
+        AutoBind
+    ], ProjectList.prototype, "dragOverHandler", null);
+    __decorate([
+        AutoBind
+    ], ProjectList.prototype, "dropHandler", null);
+    __decorate([
+        AutoBind
+    ], ProjectList.prototype, "dragLeaveHandler", null);
     return ProjectList;
 }(Component));
 // ProjectInput class
